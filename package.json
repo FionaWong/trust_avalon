@@ -1,0 +1,26 @@
+{
+  "name": "trust_avalon",
+  "version": "1.0.0",
+  "description": "this is the first avalon project ",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FionaWong/trust_avalon.git"
+  },
+  "keywords": [
+    "avalon",
+    "trust"
+  ],
+  "author": "wxf",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/FionaWong/trust_avalon/issues"
+  },
+  "homepage": "https://github.com/FionaWong/trust_avalon#readme",
+  "dependencies": {
+    "avalon": "0.0.1-security"
+  }
+}
