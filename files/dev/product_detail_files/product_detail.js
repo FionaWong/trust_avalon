@@ -17,23 +17,68 @@
 		ok : '000000',
 		noLogin : '900002'
 	};
-	function createCommands(){
-		var okCmd = createCommand(ok);
-		var nologinCmd = createCommand(noLogin);
-		var otherCmd = createCommand(other);
+	function getCallbList(successcb,nologincb,othercb){
 		return {
-			ok:function(){
-				okCmd.execute().bind(arguments);
+			'000000' : {
+				callback : successcb || function(){}
 			},
-			nologin : function(){
+			'900002' : {
+				callback : nologincb || function(){
+					//getloginPop();
+					 common.alert(json.responseMessage || "请重新登陆页面");
+				}
+			},
+			'other' : {
+				callback : othercb || function(){
+					 common.alert(json.responseMessage || "系统繁忙，请稍后再试。");
+				}
+			}
+		}
+	}
+	function responseCode(code,callbackList){
+		//策略模式实现 createCommand
+		var create = {
+			'000000' : {
+				createCmd : function(){
+					 return new createCommand(new ok());
+				}
+			},
+			'900002' : {
+				createCmd : function(){
+					 return new createCommand(new noLogin());
+				}
+			},
+			'other' : {
+				createCmd : function(){
+					return new createCommand(new other());
+				}
+			}
+		}
+		//简单合并
+		var all = (function(create,callback){
+			 allobj = {};
+			for(var x in create){
+				allobj[x] = create[x];
+				allobj[x].callback = callback[x].callback;
+			}
+			return allobj;
+		})(create,callbackList);
 
+		var cmd = all[code]['createCmd']();
+		var invoke = new invoke(cmd);
+		return invoke.execute(all[code]['callback']);
+		//invoke
+		function invoke(cmd){
+			this.cmd = cmd;
+			this.execute = function(callback){
+				return this.cmd.execute(callback);
 			}
 		}
 	}
 	var createCommand = function(receiver){
 		this.receiver = receiver;
 		this.execute = function(callback){
-			this.receiver.action(callback);
+			return this.receiver.action(callback);
 		}
 	}
 	function ok(){
@@ -116,35 +161,10 @@
             common.alert("系统繁忙，请稍后再试。");
           })
       },
-      productDetail : function(callbackList){
+      productDetail : function(){
           var url = url_config.product_detail,
           data = {format:'json',productId:productId};
-
-          var doResponse = function(json){
-
-						if(json && json.responseCode == '000000'){
-
-                var data = json.responseData;
-                detail_obj = data;
-
-
-              }else if(json.responseCode == '900002'){
-                  //getloginPop();
-                  common.alert(json.responseMessage || "请重新登陆页面");
-                  deferred.resolve();
-
-              }else{
-                  common.alert(json.responseMessage || "系统繁忙，请稍后再试。");
-                  deferred.resolve();
-
-              }
-          }
-          sendAjaxRequest(url,data)
-          .then(function(json){
-            return doResponse(json);
-          },function(error){
-            common.alert("系统繁忙，请稍后再试。");
-          });
+          return sendAjaxRequest(url,data);
    	  },
    	  validateAmount : function(){
           var url = url_config.product_validate,
@@ -239,29 +259,44 @@
 	    }
     }
 
-  },
+  };
 
-   /* page operators
-	* 拿到相应的数据，然后传参给接口层
-   */
-	pageOperate = {
-   		getLoginStateParam : function(){
+/* do responses
+	*
+*/
+function doResponses(json){
+	if(json && json.responseCode){
+		return {
+			productDetail : function(){
+				var sucsCB =function(){
+					render = new pageRender(detail_obj);
+          render.renderElm() &&//页面数据赋值
+          render.yuanObj() &&//返回数据处理
+          render.cuxiaoHTML() &&//活动规 则、促销文案等
+          render.titleRender() &&//页面数据赋值
+          render.amountRender() &&//页面数据赋值
+          render.timeLineRender() &&//计算时间轴
+          render.docRender() &&//相关文档赋值
+          render.btnRender() &&
+          render.eventBind();
+				}
+				var list = getCallbList(sucsCB);
+				responseCode(json.responseCode,list)();
+			},
+			createOrder : function(){
+				var sucsCB =function(){
 
-   		},
-   		getPageDetailParam : function(){
+				}
+				var list = getCallbList(sucsCB);
+				responseCode(json.responseCode,list)();
+			}
+		}
+	}else{
+		common.alert("系统繁忙，请稍后再试。");
+		return false;
+	}
 
-   		},
-   		getValidateAmountParam : function(){
-
-   		},
-   		getCreateOrderParam : function(){
-
-   		},
-   		getIsAccountExist : function(){
-
-   		}
-  },
-
+}
    	//登陆流程封装
    	loginedController = function(){
    		//校验输入额度是否符合规则
@@ -284,28 +319,16 @@
    	//页面渲染
    	pageRenderController = function(){
    		//调用detail接口
-      $.when(
-				$.Deferred(
-					services(url_config,productId)
+      services(url_config,productId)
 					.productDetail(productId)
-				)
-			)
-			.then(
-				function(){
-					render = new pageRender(detail_obj);
-
-          render.renderElm() &&//页面数据赋值
-          render.yuanObj() &&//返回数据处理
-          render.cuxiaoHTML() &&//活动规 则、促销文案等
-          render.titleRender() &&//页面数据赋值
-          render.amountRender() &&//页面数据赋值
-          render.timeLineRender() &&//计算时间轴
-          render.docRender() &&//相关文档赋值
-          render.btnRender() &&
-          render.eventBind()
-        },function(){
-           common.alert("系统繁忙，请稍后再试。");
-        })
+				.then(function(json){
+					var doresponse = doResponses(json);
+					if(typeof doresponse == 'object'){
+						doresponse.productDetail();
+					}
+				},function(error){
+					common.alert("系统繁忙，请稍后再试。");
+				});
    	};
    	var pageRender = function(detail_obj){
    		 this.detail_obj = detail_obj;
