@@ -18,8 +18,7 @@
     	<!--<link rel="stylesheet" href="/app_css/xintuo/earningCalculator.css">-->
 	<script type="text/javascript" src="./product_detail_files/jquery-1.12.1.min.js"></script>
 
-<style type="text/css">
-.dacheng_tuijian {width:980px; margin: 0 auto 20px; overflow: hidden;}
+<style type="text/css">.dacheng_tuijian {width:980px; margin: 0 auto 20px; overflow: hidden;}
 .dacheng_tuijian .dacheng_tit {background: url(http://img2.pingan.com/app_images/fmall2/common/dacheng_icon.gif) no-repeat left 10px; font-size:14px; line-height: 30px; padding:20px 0 15px 77px;}
 .dacheng_tuijian .dacehng_list dl {width: 233px; height: 298px; background: #fff; border:#ededed 1px solid; position: relative; float:left; margin-right:13px;}
 .dacheng_tuijian .dacehng_list dl .sub {position: absolute; right:0; top:0; width: 50px; height: 24px;text-align: center;}
@@ -64,9 +63,9 @@
 		current_url = current_url.replace("&emall_maoji=","#");
 		window.location.href=current_url;
 	}
-	var emallDomain = "toa-emall-dmzstg1.pingan.com";
+	var emallDomain = "http://chaoshi.pingan.com";
 	var hj ="";
-	var protocol = "";
+	var protocol = emallDomain;
 	if(null !=hj && 'feibiao'==hj){
 		protocol = window.location.protocol +"//"+ emallDomain + ".cn";
 	} else {
@@ -278,11 +277,7 @@
 	    	</li>
 	  	</ul>
   </div>
-
-
 </div>
-
-
 
 
 <form id="logoutform" target="logoutiframe" action="http://toa-emall-dmzstg1.pingan.com/trust/xintuo/product_detail.shtml?productId=1003076&amp;source=Fmall&amp;activity=Fmall" method="post" style="display:none;"></form>
@@ -520,50 +515,7 @@ function setNickName(){
 	maskCodePop(false);
 }
 
-//更新未完成订单数
-function upDataOrderNum() {
-	$.ajax({url: protocol+'/ajaxUpdateOrderNumController.do',
-		data:{
-			randDate: new Date().getTime()
-		},
-		type: 'POST',
-		dataType: 'jsonp',
-		success:function(json){
-			var obj = json.data;
-			if(obj != null && "" != obj && "0" != obj){
 
-				$('#orderNum').addClass('b_ff6600');
-				$('#orderNum').text(obj.allCount);
-				if("0" !=obj.insuranceCount){
-					$('#orderBaoxian').addClass('b_ff6600');
-					$('#orderBaoxian').text(obj.insuranceCount);
-				}
-				/* if("0" !=obj.endowmentCount){
-					$('#orderYanglao').addClass('b_ff6600');
-					$('#orderYanglao').text(obj.endowmentCount);
-				}
-				if("0" !=obj.financeCount){
-					$('#orderBank').addClass('b_ff6600');
-					$('#orderBank').text(obj.financeCount);
-				}
-				if("0" !=obj.loanCount){
-					$('#orderDaikuan').addClass('b_ff6600');
-					$('#orderDaikuan').text(obj.loanCount);
-				}
-				if("0" !=obj.touziCount){
-					$('#orderTouzi').addClass('b_ff6600');
-					$('#orderTouzi').text(obj.touziCount);
-				}
-				if("0" !=obj.fundCount){
-					$('#orderJijin').addClass('b_ff6600');
-					$('#orderJijin').text(obj.fundCount);
-				} */
-			}
-
-		}
-	});
-}
-//其他
 
 function logout(){
  	//退出会员系统
@@ -1044,12 +996,8 @@ function logout(){
 
     </div>
 
-
-
-
-
-
     <script>
+    var protocol =  "http://chaoshi.pingan.com";
     	var url_config = {
 			product_detail:protocol+'/open/licai/xintuo/productDetailInfo.do',
 			product_validate:protocol+'/open/licai/xintuo/productShareValidate.do',
