@@ -19,22 +19,44 @@
 	};
 	function getCallbList(successcb,nologincb,othercb){
 		return {
-			'000000' : {
-				callback : successcb || function(){}
-			},
-			'900002' : {
+			'000000' :
+				callback : successcb || function(){},
+			'900002' :
 				callback : nologincb || function(){
 					//getloginPop();
 					 common.alert(json.responseMessage || "请重新登陆页面");
-				}
-			},
-			'other' : {
+				},
+			'other' :
 				callback : othercb || function(){
 					 common.alert(json.responseMessage || "系统繁忙，请稍后再试。");
 				}
-			}
+
 		}
 	}
+	//koa的路由思想
+	function controllers(){
+		//
+
+		return {
+			productDetail : function(code,fn){
+				var sucsCB =function(){
+					render = new pageRender(detail_obj);
+					render.renderElm() &&//页面数据赋值
+					render.yuanObj() &&//返回数据处理
+					render.cuxiaoHTML() &&//活动规 则、促销文案等
+					render.titleRender() &&//页面数据赋值
+					render.amountRender() &&//页面数据赋值
+					render.timeLineRender() &&//计算时间轴
+					render.docRender() &&//相关文档赋值
+					render.btnRender() &&
+					render.eventBind();
+				}
+				getCallbList(sucsCB)[code].bind(this);
+			}
+
+		}
+	}
+
 	function responseCode(code,callbackList){
 		//策略模式实现 createCommand
 		var create = {
@@ -123,6 +145,7 @@
 			this.otherCommand.execute(callback);
 		}
 	}
+
   //global variable
   var detail_obj ={}, //详情页面对象
   services = function(url_config,productId){
