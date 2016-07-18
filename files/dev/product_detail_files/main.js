@@ -10,7 +10,7 @@ $(document).ready(function(){
     //公共处理
 
     //页面渲染
-    pageRenderController();
+    pageRenderView();
 
 
 })
@@ -18,6 +18,7 @@ var productId ='';
 /*
   通用方法区域
 */
+//bind方法
 if (!function() {}.bind) {
     Function.prototype.bind = function(context) {
         var self = this
@@ -28,6 +29,64 @@ if (!function() {}.bind) {
         }
     };
 }
+//公用外部迭代器
+var It = function(obj,index){
+  this.obj = obj;
+  this.index = index;
+}
+It.prototype.next = function(){
+  if(this.index < this.obj.length){
+    this.index ++;
+  }else{
+    this.index = 0;//从头开始
+  }
+  return this.obj[this.index] || '';
+}
+It.prototype.getItem = function(index){
+  return obj[index] || '';
+}
+It.prototype.isDone = function(index){
+  if(index >= this.index) return true;
+  else return false;
+}
+//公用的发布订阅模式分发器
+var observer = {
+  msg:[],
+  listen:function(key,fn){
+    if(!this.msg[key]){
+      this.msg[key] = [];
+    }
+    this.msg[key].push(fn);
+  },
+  trigger : function(){
+    var key = Array.prototype.slice.call(argument);
+    var fns = this.msg[key];
+    if(!fns || fns.length == 0){
+      return false;
+    }
+    for(var i=0,l=fns.length;i<l;i++){
+      fns[i].apply(argument);
+    }
+  },
+  cancel:function(key,fn){
+    var fns = this.msg[key];
+    if(!fns || fns.length<0){return false;}
+    if(!fn){
+      fns.length = 0;
+    }
+    for(var l=fns.length;l>=0;l--){
+      if(fns[l] == fn){
+        fns[l].splice(1,1);
+      }
+    }
+  }
+}
+var installObserver = function(obj){
+  for(var x in obj){
+    obj[x] = observer[x];
+  }
+}
+
 /*
   ajax 请求处理
 */
@@ -45,62 +104,64 @@ var services = function(opt){
 /**
   route 中间件: 第一层json处理
 */
-function codeTree(funcs){ //funcs{success:function(){},noLogin:function(){},other}
+function codeTree(funcs){ //funcs{000000:function(){},900002:function(){},other}
   var ok_code = '000000',
       noLogin_code ='900002',
-      other_code;
+      noProductId = '901001',
+      other_code = 'other';
   var codeTree ={};
   codeTree[ok_code] = funcs[ok_code] || function(){};
-  codeTree[noLogin_code] = funcs[noLogin_code] || function(){common.alert(json.responseMessage || "请重新登陆页面");};
-  codeTree[other_code] = funcs[other_code] || function(){common.alert(json.responseMessage || "系统繁忙，请稍后再试。");};
+  codeTree[noLogin_code] = funcs[noLogin_code] || function(json){common.loginPop();};//common.alert(json.responseMessage || "请重新登陆页面."); };
+  codeTree[noProductId] = funcs[noProductId] || function(json){common.alert( json.responseMessage || "指定的条件记录不存在.");};
+  codeTree[other_code] = funcs[other_code] || function(json){common.alert( json.responseMessage || "系统繁忙，请稍后再试。");};
 
   return codeTree;
-}
-//做根据返回的code，输入对应的回调函数的参数
-function route(jsonCode,funcs){
-  var codeTree = codeTree(funcs);
-  function(params){//callback函数对应的参数
-    return codeTree[jsonCode].bind(this,(function(param){
-      //根据code过滤param
-      
-      //需要注入的所有参数集合
-    })(param));
-  }
 }
 /*
   ajax控制器中间件
 */
 function ajaxMidware(servicesFn,serviceOpt){//注入service ajax的调用函数
       //serviceFn返回promise
-  var ajaxCall = serviceFn.bind(this,serviceOpt);
+  var ajaxCall = servicesFn(serviceOpt);
+
   //注入业务处理函数，ajax成功失败回调函数，一般只负责sucess
-  return function(ajaxFnObj){//注入成功回调函数需要的参数[{ajax:function(){},[]},{}]
+  return function(codeTree){//注入成功回调函数及其需要的参数[{code:function(){}.bind(params)},{unlogin:function(){}.bind(params)},{error}]
     var invoke = {};
     ajaxCall.then(function(json){
-
-      if(json.responseCode)
-      route.bind(this,json.responseCode,ajaxFnObj)(args);
+      if(json.responseCode){
+        if(codeTree[json.responseCode]){
+          codeTree[json.responseCode](json);
+        }else{
+          codeTree['other'](json);
+        }
+      }
     });
   }
-
 }
 /**
   各种业务控制器
 **/
 //页面渲染
-var pageRenderController = function(successFn,args){
- //调用detail接口
- ajaxMidware(services,opt)(successFn)(args);
+var pageRenderController = function(opt,successFn){
+ ajaxMidware(services,opt)(successFn);
 };
+//立即购买流程
+var buyNowController = function(){
+  var codeTreeObj = codeTree({'000000':buyNowView.accountIsExitFn.bind(this)});
+  ajaxMidware(services,buyNowView.accountIsExitOpt())(codeTreeObj);
+}
 //登陆流程封装
 var loginedController = function(){
- //校验输入额度是否符合规则
+   //校验输入额度是否符合规则
+   if(!buyNowView.checkAmountValid()) return false;
+   //校验剩余额度
+   var codeTreeObj = codeTree({'000000':buyNowView.checkAmountFns.bind(this)});
+   ajaxMidware(services,buyNowView.checkAmountOpt())(codeTreeObj);
+   //生成订单
 
- //生成订单
+   //主账户是否存在
 
- //主账户是否存在
-
- //跳转到哪个页面
+   //跳转到哪个页面
 
 };
 //未登陆流程封装
@@ -112,7 +173,94 @@ var beforeloginedController = function(){
  //弹框
 };
 
+//点击购买view层
+var buyNowView = {
+  accountIsExitOpt:function(){
+    return opt = {
+      type : 'GET',
+      url : url_config.isAccountExist,
+      dataType : "jsonp",
+      cache : false,
+      data : {'format':'json','from':'pc'},
+      timeout: 50000
+    };
+  },
+  accountIsExitFn:function(json){
+    if(!json.isLoginEmall) {
+        //额度保存,弹框登录
+        common.loginPop(buyNowView.addUrlPara('amount',$('#buyMoney').attr('data-value')));
+        return;
+    } else{
 
+         //执行已登录流程
+    }
+  },
+  addUrlPara : function(name, value) {
+    if(!value) return false;
+      var currentUrl = window.location.href.split('#')[0];
+      if (/\?/g.test(currentUrl)) {
+          if (/name=[-\w]{4,25}/g.test(currentUrl)) {
+              currentUrl = currentUrl.replace(/name=[-\w]{4,25}/g, name + "=" + value);
+          } else {
+              currentUrl += "&" + name + "=" + value;
+          }
+      } else {
+          currentUrl += "?" + name + "=" + value;
+      }
+      if (window.location.href.split('#')[1]) {
+          return currentUrl + '#' + window.location.href.split('#')[1];
+      } else {
+          return currentUrl;
+      }
+  },
+  checkAmountValid : function(){
+    var amount = common.getParam('amount') || '';
+    if(amount){//url有参数，说明是未登录转登录的
+      //校验amount是否合法，然后放入val中
+      if(buyMoneyOperator.validateRules.isNotEmpty(amount)
+        && buyMoneyOperator.validateRules.isNumber(amount)){
+           $('#buyMoney').attr('data-value',amount);
+       }else{
+         ylx.alert("请输入正确的金额");
+         return false;
+       }
+       return true;
+     }
+     return false;
+  },
+  checkAmountOpt :function(){
+
+  },
+  checkAmountFns:function(){
+
+  }
+}
+//页面渲染view层
+var pageRenderView = function(){
+  //调用detail接口
+   var opt = {
+     type : 'GET',
+     url : url_config.product_detail,
+     dataType : "jsonp",
+     cache : false,
+     data : {format:'json',productId:productId},
+     timeout: 50000
+   };
+   var successFn = function(json){
+     detail_obj = json.responseData || {};
+     var render = new pageRender(detail_obj);
+     render.renderElm() &&//页面数据赋值
+     render.yuanObjFn() &&//返回数据处理
+     render.cuxiaoHTML() &&//活动规 则、促销文案等
+     render.titleRender() &&//页面数据赋值
+     render.amountRender() &&//页面数据赋值
+     render.timeLineRender() &&//计算时间轴
+     render.docRender() &&//相关文档赋值
+     render.btnRender(detail_obj.isOff) &&
+     render.eventBind();
+   }
+   pageRenderController(opt,codeTree({'000000':successFn.bind(this)}));
+};
 
 /*
   页面处理
@@ -178,15 +326,16 @@ pageRender.timeLineUtil = {
     }
 };
 pageRender.prototype = {
-  constructor : pageRender,
+  constructor : this,
   renderElm : function(){
     var self = this,detail_obj= self.detail_obj;
     for(var i in detail_obj){
         $('.'+i).val(  detail_obj[i])  ;
         $('.'+i).html( detail_obj[i]) ;
     }
+    return true;
   },
-  yuanObj : function(){
+  yuanObjFn : function(){
     var self = this,detail_obj= self.detail_obj;
     return self.yuanObj = {
         rate:detail_obj.incomeRate,//rate
@@ -196,8 +345,8 @@ pageRender.prototype = {
         minVal:detail_obj.investmentAmount*10000+"",//min
         maxVal:detail_obj.investmentAmount*10000*10+"",//max
         increment:detail_obj.increaseAmount*10000+"",//step
-        productLimit:detail_obj.period,//days
-        templateType:templateType
+        productLimit:detail_obj.period//days
+
     }
   },
   cuxiaoHTML : function(){
@@ -212,6 +361,7 @@ pageRender.prototype = {
         html +="了解详情&gt;</a>";
 
         $(".cu_ljxq").html(html);
+        return true;
   },
   titleRender : function(){
     var self = this,detail_obj= self.detail_obj;
@@ -225,10 +375,12 @@ pageRender.prototype = {
          $("a.buyBtn").attr("otitle","产品详情-金融旗舰店-"+ detail_obj.productName || ''+"-立即购买");
         //rate add %
         $('.incomeRate').html(detail_obj.incomeRate);
+        return true;
   },
   amountRender : function(){//render buyAmount
     var self = this,detail_obj= self.detail_obj;
     $("#buyMoney").val(detail_obj.investmentAmount+"万元起");
+    return true;
   },
   timeLineRender : function(){
     function changeData(elm){
@@ -247,6 +399,7 @@ pageRender.prototype = {
         changeData($('.dateIncomeEnd'));
         var timeLineUtil = pageRender.timeLineUtil;
         timeLineUtil.setWidth();
+        return true;
   },
   docRender : function(){
     detail_obj = this.detail_obj;
@@ -268,6 +421,7 @@ pageRender.prototype = {
                 '" title="'+detail_obj.productName+''+docArray[x]+'">'+detail_obj.productName+''+docArray[x]+'</a></p>';
         }
         $(".docList").html(str);
+        return true;
   },
   btnRender : function(isoff){
      //5.17 如果可用额度为0或者小于最小购买额度时，在按钮下方展示“您还有机会，其他买家还有一些未支付的订单，15分钟将可能被释放，您可以稍后刷新页面抢购剩余份额。”按钮文案为“售罄”，状态禁用；
@@ -302,11 +456,14 @@ pageRender.prototype = {
                 $("a.buyBtn").html("已售罄").addClass("ts_orange_btn");
                 break;
         }
+        return true;
   },
   eventBind:function(){
     //需要执行的方法
     buyBtnClick();
-
+    //绑定购买金额Input框
+    var buyMoney = new buyMoneyOperator("buyMoney");
+    buyMoney.bindEvent();
     function detailTabToggle(){
       $(".progress_bar p i.note_icon").hover(function(){
           $(".srb_tips").toggle();
@@ -334,7 +491,7 @@ pageRender.prototype = {
           if($(this).hasClass('canClick')){
              $(this).removeClass('canClick');
              if(detail_obj.isOff == '4') {
-               validateAmount($('#buyMoney').attr('data-value'));
+               buyNowController($('#buyMoney').attr('data-value'));
               }
           }
       })
@@ -348,8 +505,8 @@ function buyMoneyOperator(elm){
 //静态方法，用来做校验
 buyMoneyOperator.validateRules = {
   //不能为空
-  isNotEmpty:function(obj,errorMsg){
-    var val = obj.val || "";
+  isNotEmpty:function(val,errorMsg){
+    var val = val || "";
     val = val.replace(/\,/g,'');
     if(!!val){
       showErrorMsg(errorMsg || "请输入购买金额");
@@ -357,54 +514,59 @@ buyMoneyOperator.validateRules = {
     }
   },
   //必须是数字
-  isNumber:function(obj,errorMsg){
+  isNumber:function(val,errorMsg){
     var reg = new RegExp("^[0-9]*$"),
-    val = obj.val || "",
+    val = val || "",
     val = val.replace(/\,/g,'');
     if(!reg.test(val)){
       showErrorMsg(errorMsg || "购买金额请输入数字");
       return false;
     }
+    return true;
   },
   //小于等于剩余额度
-  lessRest : function(obj){
-    var val = obj.val || "",
+  lessRest : function(val,max){
+    var val = val || "",
     val = val.replace(/\,/g,''),
-    left = obj.max || 0;
+    left = max || 0;
     if(parseInt(left)*10000  > val || parseInt(left)*10000  == val){}else{
-           showErrorMsg("剩余额度"+left+"万元");
-            return false;
-        }
-    },
+       showErrorMsg("剩余额度"+left+"万元");
+        return false;
+    }
+    return true;
+  },
   //大于等于起购金额
-  moreInvest:function(obj){
-    var val = obj.val || "",
+  moreInvest:function(val,min){
+    var val = val || "",
     val = val.replace(/\,/g,''),
-    investAmount = obj.min || 0;
+    investAmount = min || 0;
     if(parseInt(investAmount)*10000 > parseInt(val)){
             showErrorMsg("起购金额"+investAmount+"万元");
             return false;
         }
+    return true;
   },
   //小于等于单次购买上限
-  lessUplimit : function(obj){
-    var val = obj.val || "",
+  lessUplimit : function(val,uplimit){
+    var val = val || "",
     val = val.replace(/\,/g,''),
-    uplimit = obj.uplimit || 0;
+    uplimit = uplimit || 0;
     if(val>parseInt(uplimit)*10000 ){
             showErrorMsg("单次购买额度不能超过"+uplimit+"万元");
             return false;
         }
+    return true;
   },
   //递增金额的数倍
-  multipleIncrease : function(obj){
-    var val = obj.val || "",
+  multipleIncrease : function(val,increase){
+    var val = val || "",
     incease = val.replace(/\,/g,''),
-    uplimit = obj.increase || 0;
+    uplimit = increase || 0;
     if(parseInt(val)  % (parseInt(increase)*10000) === 0 ){}else{
             showErrorMsg("请输入"+increase+"万元的倍数，然后购买");
             return false;
         }
+    return true;
   }
 };
 /*
@@ -784,11 +946,12 @@ var common={
         return items;
     },
     //弹窗
-   loginPop : function(){
-    var returnUrl = window.location.href;
+   loginPop : function(returnUrl){
+     returnUrl =  returnUrl || window.location.href;
     loginPop(true,returnUrl);
    }
 };
+
 window.common=common;
 
 //response 处理
