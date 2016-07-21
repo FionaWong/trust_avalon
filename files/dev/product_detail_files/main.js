@@ -5,16 +5,19 @@
 $(document).ready(function(){
 
     productId = common.getParam("productId") || "64106";
-    //事件绑定
-
-    //公共处理
-
     //页面渲染
     pageRenderView();
-
-
+    //url中的amount
+    amount = buyMoneyOperator.getAmount();
+    //url中有amount值，触发点击事件
+    if(amount){
+      buyMoneyOperator.setAmount(amount);
+      $('a.buyBtn').trigger('click');
+    }
 })
-var productId ='';
+var productId ='',
+amount,
+yuanObj={};
 /*
   通用方法区域
 */
@@ -108,13 +111,18 @@ function codeTree(funcs){ //funcs{000000:function(){},900002:function(){},other}
   var ok_code = '000000',
       noLogin_code ='900002',
       noProductId = '901001',
+      noFiveInfor ='903007',//五项信息不全
+      noID ='903008',//证件不是身份证
+      noAccount ='903009',//主账户不存在
       other_code = 'other';
   var codeTree ={};
   codeTree[ok_code] = funcs[ok_code] || function(){};
   codeTree[noLogin_code] = funcs[noLogin_code] || function(json){common.loginPop();};//common.alert(json.responseMessage || "请重新登陆页面."); };
   codeTree[noProductId] = funcs[noProductId] || function(json){common.alert( json.responseMessage || "指定的条件记录不存在.");};
   codeTree[other_code] = funcs[other_code] || function(json){common.alert( json.responseMessage || "系统繁忙，请稍后再试。");};
-
+  codeTree[noFiveInfor] = funcs[noFiveInfor] || function(){common.alert(json.responseMessage || "五项信息不全");};
+  codeTree[noID] = funcs[noID] || function(){common.alert(json.responseMessage || "证件号码不是身份证");};
+  codeTree[noAccount] = funcs[noAccount] || function(){common.alert(json.responseMessage || "主账户不存在");};
   return codeTree;
 }
 /*
@@ -135,6 +143,8 @@ function ajaxMidware(servicesFn,serviceOpt){//注入service ajax的调用函数
           codeTree['other'](json);
         }
       }
+    },function(json){//失败函数
+      codeTree['other'](json);//暂时执行Other里面的内容
     });
   }
 }
@@ -145,36 +155,103 @@ function ajaxMidware(servicesFn,serviceOpt){//注入service ajax的调用函数
 var pageRenderController = function(opt,successFn){
  ajaxMidware(services,opt)(successFn);
 };
-//立即购买流程
-var buyNowController = function(){
-  var codeTreeObj = codeTree({'000000':buyNowView.accountIsExitFn.bind(this)});
-  ajaxMidware(services,buyNowView.accountIsExitOpt())(codeTreeObj);
-}
+
 //登陆流程封装
 var loginedController = function(){
-   //校验输入额度是否符合规则
-   if(!buyNowView.checkAmountValid()) return false;
-   //校验剩余额度
-   var codeTreeObj = codeTree({'000000':buyNowView.checkAmountFns.bind(this)});
-   ajaxMidware(services,buyNowView.checkAmountOpt())(codeTreeObj);
-   //生成订单
-
-   //主账户是否存在
-
-   //跳转到哪个页面
+  checkAmountController();
+};
+var checkAmountController = function(){
+  //校验输入额度是否符合规则
+  if(!buyNowView.checkAmountValid()) return false;
+  //校验剩余额度
+  var codeTreeObj = codeTree(buyNowView.checkAmountFns());
+  ajaxMidware(services,buyNowView.checkAmountOpt())(codeTreeObj);
+};
+var accountIsExitController = function(){
+  //主账户是否存在
+  var codeTreeAccount = codeTree(buyNowView.accountIsExitFn());
+  ajaxMidware(services,buyNowView.accountIsExitOpt())(codeTreeAccount);
 
 };
+var createOrderController = function(){
+  //生成订单
+  var codeTreeOrder = codeTree(buyNowView.createOrderFn());
+  ajaxMidware(services,buyNowView.createOrderOpt())(codeTreeOrder);
+}
+
 //未登陆流程封装
-var beforeloginedController = function(){
+var isloginedController = function(){
  //判断是否输入购买额度，校验是否是数字
-
  //将额度保存到url中
-
  //弹框
+ services(buyNowView.memberAliasOpt())
+ .then(buyNowView.memberAliasFn().success,buyNowView.memberAliasFn().fail);
 };
 
-//点击购买view层
+//view层
 var buyNowView = {
+  //是否登录
+  memberAliasOpt: function(){
+    return opt = {
+      type : 'GET',
+      url : url_config.memberAlias,
+      dataType : "jsonp",
+      cache : false,
+      data : {},
+      timeout: 50000
+    };
+  },
+  memberAliasFn : function(){
+    return {
+      success:function(json){
+        if(!json.isLoginEmall) {
+           //额度保存,弹框登录
+           common.loginPop(buyNowView.addUrlPara('amount',$('#buyMoney').attr('data-value')));
+           return false;
+         } else{
+            //执行已登录流程
+            loginedController();
+         }
+      },
+      fail : function(e){
+        common.alert("网络繁忙，请稍候再试");
+      }
+    }
+  },
+  payAmount :0,
+  //订单生成
+  createOrderOpt : function(){
+    var data={
+        productCode:detail_obj.productCode,
+        payAmount:parseInt(buyNowView.payAmount),
+        productId:detail_obj.productId,
+        productName:detail_obj.productName,
+        source:getParam("source") || 'Fmall',
+        activity:getParam('activity')   || 'Fmall'
+    };
+    return opt = {
+        url:url_config.createOrder,
+        dataType:"jsonp",
+        cache:false,
+        data:data
+    };
+  },
+  createOrderFn : function(){
+    return {
+      '000000':function(json){
+            window.location.href = url_config.order_ensure+"&orderNo="+json.responseData.orderNo;
+      },
+      '900002':function(json){
+        $('a.buyBtn').addClass('canClick');
+        common.alert("请重新登陆");
+      },
+      'other':function(){
+        $('a.buyBtn').addClass('canClick');
+        common.alert("网络繁忙，请稍候再试");
+      }
+    }
+  },
+  //主账户是否存在
   accountIsExitOpt:function(){
     return opt = {
       type : 'GET',
@@ -185,14 +262,46 @@ var buyNowView = {
       timeout: 50000
     };
   },
-  accountIsExitFn:function(json){
-    if(!json.isLoginEmall) {
-        //额度保存,弹框登录
-        common.loginPop(buyNowView.addUrlPara('amount',$('#buyMoney').attr('data-value')));
-        return;
-    } else{
+  accountIsExitFn:function(){
+    return {
+      '000000':function(json){
+        if(!(json && json.responseData)){
+          $('a.buyBtn').addClass('canClick');
+          common.alert('主账号状态异常');
+          return false;
+        }
+        var responseData = json.responseData;
+        if(responseData.isExist == '0' ){
 
-         //执行已登录流程
+              window.location.href = url_config.infor+"&productId="+productId+'&amount='+buyNowView.payAmount;
+
+        }else if(responseData.isExist == '1' && responseData.status == '01'){
+
+          createOrderController();
+
+        }else if(responseData.isExist == '1' && responseData.status == '00'){
+
+          window.location.href = url_config.infor+"&productId="+productId+'&amount='+buyNowView.payAmount;
+
+        }else{
+          $('a.buyBtn').addClass('canClick');
+          common.alert('主账号状态异常');
+
+        }
+      },
+      '903007':function(){//五项信息补全/证件类型不是身份证/主账户不存在
+         window.location.href = url_config.infor+"&productId="+productId+'&amount='+buyNowView.payAmount;
+      },
+      '903008' : function () {
+         window.location.href = url_config.infor+"&productId="+productId+'&amount='+buyNowView.payAmount;
+      },
+      '903009':function () {
+         window.location.href = url_config.infor+"&productId="+productId+'&amount='+buyNowView.payAmount;
+      },
+      'other':function () {
+        $('a.buyBtn').addClass('canClick');
+        common.alert(response.responseMessage || "系统繁忙，请稍后再试");
+      }
     }
   },
   addUrlPara : function(name, value) {
@@ -214,25 +323,54 @@ var buyNowView = {
       }
   },
   checkAmountValid : function(){
-    var amount = common.getParam('amount') || '';
-    if(amount){//url有参数，说明是未登录转登录的
-      //校验amount是否合法，然后放入val中
-      if(buyMoneyOperator.validateRules.isNotEmpty(amount)
-        && buyMoneyOperator.validateRules.isNumber(amount)){
-           $('#buyMoney').attr('data-value',amount);
-       }else{
-         ylx.alert("请输入正确的金额");
-         return false;
-       }
-       return true;
+    var _amount = $("#buyMoney").attr('data-value');
+    if(!_amount){
+      common.alert("请输入正确的购买金额");
+      return false;
+    }
+    //校验amount是否合法，然后放入val中
+    if(buyMoneyOperator.validateRules.isNotEmpty({'val':_amount})
+      && buyMoneyOperator.validateRules.isNumber({'val':_amount})){
+         buyNowView.payAmount = _amount;
+         return true;
+     }else{
+       common.alert("请输入正确的购买金额");
+       return false;
      }
-     return false;
   },
   checkAmountOpt :function(){
-
+    return {
+     url:url_config.product_validate,
+     dataType:"jsonp",
+     cache:false,
+     data:{format:'json',productId:productId}
+   }
   },
   checkAmountFns:function(){
-
+    return {
+      '000000':function(json){
+          var left = json.responseData.residueQuota;
+          var validateObj = {
+            val : buyNowView.payAmount,
+            max : left*10000,
+            min : detail_obj.investmentAmount,
+            uplimit : detail_obj.upperLimitAmount || 50,
+            increase : detail_obj.increaseAmount
+          };
+          buyMoneyOperator.buyAmountValidate (validateObj) && detail_obj.isOff == '4'?
+          (function(){
+            $("a.buyBtn").removeClass("ts_orange_btn").addClass("orange_btn");
+            $("p.errorMsg").hide();
+            //查看主账户是否存在
+            accountIsExitController();
+          })()
+          :
+          (function(){
+            $("p.errorMsg").show();
+            $('a.buyBtn').addClass('canClick')
+          })()
+      }
+    }
   }
 }
 //页面渲染view层
@@ -337,14 +475,14 @@ pageRender.prototype = {
   },
   yuanObjFn : function(){
     var self = this,detail_obj= self.detail_obj;
-    return self.yuanObj = {
+    return yuanObj = {
         rate:detail_obj.incomeRate,//rate
         productIntroduce:detail_obj.productIntroduce,//productIntroduce
         incomeInstruction:detail_obj.incomeInstruction,//incomeInstruction
         bVal:'1',//current
-        minVal:detail_obj.investmentAmount*10000+"",//min
-        maxVal:detail_obj.investmentAmount*10000*10+"",//max
-        increment:detail_obj.increaseAmount*10000+"",//step
+        minVal:(detail_obj.investmentAmount || 5)*10000+"",//min
+        maxVal:(detail_obj.upperLimitAmount || 50)*10000+"",//max
+        increment:(detail_obj.increaseAmount || 1)*10000+"",//step
         productLimit:detail_obj.period//days
 
     }
@@ -464,34 +602,13 @@ pageRender.prototype = {
     //绑定购买金额Input框
     var buyMoney = new buyMoneyOperator("buyMoney");
     buyMoney.bindEvent();
-    function detailTabToggle(){
-      $(".progress_bar p i.note_icon").hover(function(){
-          $(".srb_tips").toggle();
-      })
-      $(".detail_con_tit").find("a").each(function(i,element){
-            $(element).unbind("click").bind("click",function(){
-                $(this).addClass("on");
-                $(this).siblings().removeClass("on");
-                $("#detail_con_box").find(".detail_con_box").eq(i).show();
-                $("#detail_con_box").find(".detail_con_box").eq(i).siblings("div").hide();
-            });
-      });
-    }
-    //testRateClick
-    function testRateClick(){
-    //param 1:被添加元素 2:绑定事件元素 3参数对象
-        $("img.testRate").unbind("click").bind("click",function(e){
-          earningCalculator('div.detail_right','img.testRate',obj);
-        });
-    }
-
     //buyBtn click
     function buyBtnClick(){
       $("a.buyBtn").click(function(){
           if($(this).hasClass('canClick')){
-             $(this).removeClass('canClick');
+             //$(this).removeClass('canClick');
              if(detail_obj.isOff == '4') {
-               buyNowController($('#buyMoney').attr('data-value'));
+               isloginedController($('#buyMoney').attr('data-value'));
               }
           }
       })
@@ -505,30 +622,31 @@ function buyMoneyOperator(elm){
 //静态方法，用来做校验
 buyMoneyOperator.validateRules = {
   //不能为空
-  isNotEmpty:function(val,errorMsg){
-    var val = val || "";
+  isNotEmpty:function(obj){
+    var val = obj.val || "";
     val = val.replace(/\,/g,'');
-    if(!!val){
-      showErrorMsg(errorMsg || "请输入购买金额");
+    if(!val){
+      showErrorMsg(obj.errorMsg || "请输入购买金额");
       return false;
     }
+    return true;
   },
   //必须是数字
-  isNumber:function(val,errorMsg){
+  isNumber:function(obj){
     var reg = new RegExp("^[0-9]*$"),
-    val = val || "",
+    val = obj.val || "",
     val = val.replace(/\,/g,'');
     if(!reg.test(val)){
-      showErrorMsg(errorMsg || "购买金额请输入数字");
+      showErrorMsg(obj.errorMsg || "购买金额请输入数字");
       return false;
     }
     return true;
   },
   //小于等于剩余额度
-  lessRest : function(val,max){
-    var val = val || "",
+  lessRest : function(obj){
+    var val = obj.val || "",
     val = val.replace(/\,/g,''),
-    left = max || 0;
+    left = obj.max || 0;
     if(parseInt(left)*10000  > val || parseInt(left)*10000  == val){}else{
        showErrorMsg("剩余额度"+left+"万元");
         return false;
@@ -536,10 +654,10 @@ buyMoneyOperator.validateRules = {
     return true;
   },
   //大于等于起购金额
-  moreInvest:function(val,min){
-    var val = val || "",
+  moreInvest:function(obj){
+    var val = obj.val || "",
     val = val.replace(/\,/g,''),
-    investAmount = min || 0;
+    investAmount = obj.min || 0;
     if(parseInt(investAmount)*10000 > parseInt(val)){
             showErrorMsg("起购金额"+investAmount+"万元");
             return false;
@@ -547,10 +665,10 @@ buyMoneyOperator.validateRules = {
     return true;
   },
   //小于等于单次购买上限
-  lessUplimit : function(val,uplimit){
-    var val = val || "",
+  lessUplimit : function(obj){
+    var val = obj.val || "",
     val = val.replace(/\,/g,''),
-    uplimit = uplimit || 0;
+    uplimit = obj.uplimit || 0;
     if(val>parseInt(uplimit)*10000 ){
             showErrorMsg("单次购买额度不能超过"+uplimit+"万元");
             return false;
@@ -558,10 +676,10 @@ buyMoneyOperator.validateRules = {
     return true;
   },
   //递增金额的数倍
-  multipleIncrease : function(val,increase){
-    var val = val || "",
-    incease = val.replace(/\,/g,''),
-    uplimit = increase || 0;
+  multipleIncrease : function(obj){
+    var val = obj.val || "",
+    val = val.replace(/\,/g,''),
+    increase = obj.increase || 0;
     if(parseInt(val)  % (parseInt(increase)*10000) === 0 ){}else{
             showErrorMsg("请输入"+increase+"万元的倍数，然后购买");
             return false;
@@ -581,14 +699,26 @@ increase : should be multiple of the increase
 * errorMsg : if not meet the rules print message
 * callback : the delegate callback
 */
-buyMoneyOperator.buyAmountValidate = function(amountObj,errorMsg,callback){
-  return callback && callback.apply(this,amountObj,errorMsg);
+buyMoneyOperator.buyAmountValidate = function(amountObj,errorMsg){
+  amountObj = amountObj ||{};
+  var result = true;
+  if(amountObj && amountObj.length == 0){
+    return false;
+  }
+  for(var x in buyMoneyOperator.validateRules){
+    if(typeof(buyMoneyOperator.validateRules[x])  === 'function'){
+      result = result && buyMoneyOperator.validateRules[x](amountObj);
+      if(!result){
+        break;
+      }
+    }
+  }
+  return result;
 }
 var showErrorMsg = buyMoneyOperator.showErrorMsg =  function(errorMsg){
  $("p.errorMsg").html(errorMsg);
 }
-buyMoneyOperator.setAmount = function(){
-  amount  = common.getParam('amount') || '';
+buyMoneyOperator.setAmount = function(amount){
    var val=amount ,strArr=[],wei=1,newStr;
     var str=val.replace(/,/g,"");
    $('#buyMoney').attr("data-value",str);
@@ -604,7 +734,7 @@ buyMoneyOperator.setAmount = function(){
   $('#buyMoney').val(newStr);
 }
 buyMoneyOperator.getAmount = function(){
-  return getParam('amount') || '';
+  return common.getParam('amount') || '';
 }
 //作用域方法，绑定事件
 buyMoneyOperator.prototype = {
@@ -646,7 +776,7 @@ buyMoneyOperator.prototype = {
           }
       }).focus(function(e){
           var val=$(this).val();
-          if(val== '请输入起购金额'){$(this).val("");}
+          if(val.indexOf('万元起') > -1){$(this).val("");}
       });
    }
 };
